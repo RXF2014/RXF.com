@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>电子画册 | 1-36号作品</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none; /* 避免翻页时误选文字，不影响功能 */
+        }
+
+        body {
+            background: #0a0c12;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: system-ui, 'Segoe UI', 'Helvetica Neue', sans-serif;
+            padding: 20px;
+        }
+
+        /* 主画册容器 */
+        .album-container {
+            position: relative;
+            width: 100%;
+            max-width: 1400px;
+            background: #0f1117;
+            border-radius: 32px;
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        /* 图片展示核心区 */
+        .viewer {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #020304;
+            min-height: 480px;
+            border-radius: 28px;
+            margin: 16px;
+            margin-bottom: 8px;
+            overflow: hidden;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        /* 图片容器，负责承载 img 或 canvas */
+        .image-frame {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+
+        /* 统一的媒体元素样式 (图片 / 后备canvas) */
+        .frame-media {
+            display: block;
+            max-width: 100%;
+            max-height: 75vh;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+            border-radius: 16px;
+            background: #1e1f2c;
+            transition: transform 0.2s ease, opacity 0.2s;
+            cursor: pointer;
+        }
+
+        /* 加载中占位符 */
+        .loading-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            color: #aaa;
+            font-size: 0.95rem;
+            background: #1a1c26;
+            border-radius: 24px;
+            padding: 48px 32px;
+            min-width: 240px;
+            backdrop-filter: blur(2px);
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            border-top: 3px solid #ffb347;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 左右导航按钮 (大，悬浮) */
+        .nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(20, 22, 32, 0.85);
+            backdrop-filter: blur(12px);
+            border: none;
+            width: 52px;
+            height: 52px;
+            border-radius: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: 500;
+            color: #f0f0f0;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+            z-index: 20;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-family: monospace;
+            line-height: 1;
+        }
+
+        .nav-btn:hover:not(:disabled) {
+            background: #ffb347;
+            color: #0a0c12;
+            transform: translateY(-50%) scale(1.05);
+            border-color: rgba(255, 180, 70, 0.8);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .nav-btn:active {
+            transform: translateY(-50%) scale(0.96);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            background: rgba(40, 42, 54, 0.6);
+            backdrop-filter: blur(6px);
+        }
+
+        .prev-btn {
+            left: 24px;
+        }
+
+        .next-btn {
+            right: 24px;
+        }
+
+        /* 底部控制栏 — 简洁 页码 + 辅助按钮 */
+        .footer-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 28px 24px 28px;
+            background: rgba(12, 14, 20, 0.7);
+            backdrop-filter: blur(4px);
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .page-indicator {
+            background: #1f222e;
+            padding: 8px 20px;
+            border-radius: 48px;
+            font-size: 1rem;
+            font-weight: 500;
+            letter-spacing: 1px;
+            color: #ffcd7e;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 6px rgba(0,0,0,0.2);
+            backdrop-filter: blur(4px);
+        }
+
+        .page-indicator span {
+            font-weight: 700;
+            font-size: 1.35rem;
+            color: #ffb347;
+            margin: 0 4px;
+        }
+
+        .jump-area {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #0e1018;
+            padding: 5px 14px;
+            border-radius: 60px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .jump-input {
+            width: 62px;
+            background: #1a1c24;
+            border: none;
+            padding: 8px 6px;
+            border-radius: 32px;
+            text-align: center;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #ffdd99;
+            outline: none;
+            font-family: monospace;
+            transition: 0.1s;
+        }
+
+        .jump-input:focus {
+            background: #252a38;
+            box-shadow: 0 0 0 2px #ffb34755;
+        }
+
+        .jump-btn {
+            background: #2a2e3c;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 32px;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 0.85rem;
+        }
+
+        .jump-btn:hover {
+            background: #ffb347;
+            color: #0b0d12;
+            transform: scale(0.98);
+        }
+
+        /* 移动端友好: 按钮稍小，边缘距离减小 */
+        @media (max-width: 680px) {
+            .album-container {
+                border-radius: 24px;
+            }
+            .viewer {
+                margin: 12px;
+                min-height: 360px;
+            }
+            .nav-btn {
+                width: 44px;
+                height: 44px;
+                font-size: 28px;
+            }
+            .prev-btn {
+                left: 12px;
+            }
+            .next-btn {
+                right: 12px;
+            }
+            .footer-controls {
+                padding: 12px 20px 18px;
+            }
+            .frame-media {
+                max-height: 65vh;
+            }
+            .jump-area {
+                padding: 3px 10px;
+            }
+        }
+
+        /* 优雅过渡 */
+        .image-frame {
+            transition: opacity 0.2s;
+        }
+
+        /* 提示点击/键盘 */
+        .info-tip {
+            font-size: 0.7rem;
+            color: #7e849b;
+            margin-left: auto;
+            background: #1b1e28;
+            padding: 5px 12px;
+            border-radius: 24px;
+            letter-spacing: 0.3px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="album-container" id="albumRoot">
+    <div class="viewer">
+        <!-- 左右导航大按钮 (绝对定位) -->
+        <button class="nav-btn prev-btn" id="prevBtn" aria-label="上一页">‹</button>
+        <button class="nav-btn next-btn" id="nextBtn" aria-label="下一页">›</button>
+        
+        <!-- 动态图片展示区 -->
+        <div class="image-frame" id="imageFrame">
+            <!-- 动态生成 img 或 canvas 位于此容器内 -->
+            <div class="loading-placeholder" id="loadingTemp" style="display: flex;">
+                <div class="spinner"></div>
+                <span>加载画册中...</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer-controls">
+        <div class="page-indicator">
+            📖 <span id="currentPage">1</span> / <span id="totalPages">36</span>
+        </div>
+        <div class="jump-area">
+            <span style="color:#aaa; font-size:0.8rem;">跳转</span>
+            <input type="number" id="jumpInput" class="jump-input" min="1" max="36" value="1">
+            <button id="jumpBtn" class="jump-btn">GO</button>
+        </div>
+        <div class="info-tip">
+            ⬅  ➡  键盘左右键翻页
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        // ----------------------------- 配置区 ---------------------------------
+        // 图片命名规则 1-36，请根据实际存放路径修改前缀和后缀
+        // 真实使用时，将1.jpg ~ 36.jpg (或 .png) 放入下面指定的目录即可
+        const IMAGE_BASE_PATH = './huace1/';     // 图片文件夹路径，可修改为相对路径或绝对路径
+        const IMAGE_EXT = '.jpg';                // 图片扩展名，若为png请修改为'.png'
+        
+        // 总图片数量
+        const TOTAL_COUNT = 36;
+        
+        // 当前显示的页码 (1-index)
+        let currentIdx = 1;
+        
+        // 防止快速切换时重复渲染导致冲突
+        let isRendering = false;
+        let pendingRender = null;
+        
+        // DOM 元素
+        const imageFrame = document.getElementById('imageFrame');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const currentPageSpan = document.getElementById('currentPage');
+        const totalPagesSpan = document.getElementById('totalPages');
+        const jumpInput = document.getElementById('jumpInput');
+        const jumpBtn = document.getElementById('jumpBtn');
+        
+        // 设置总页数显示
+        totalPagesSpan.innerText = TOTAL_COUNT;
+        
+        // ---------- 辅助函数：更新按钮禁用状态 ----------
+        function updateButtonsState() {
+            if (currentIdx <= 1) {
+                prevBtn.disabled = true;
+            } else {
+                prevBtn.disabled = false;
+            }
+            
+            if (currentIdx >= TOTAL_COUNT) {
+                nextBtn.disabled = true;
+            } else {
+                nextBtn.disabled = false;
+            }
+        }
+        
+        // ---------- 更新页码显示 ----------
+        function updatePageIndicator() {
+            currentPageSpan.innerText = currentIdx;
+            if (jumpInput) jumpInput.value = currentIdx;
+        }
+        
+        // ---------- 核心：后备方案，生成完美比例canvas (模拟原图尺寸/内容) ----------
+        // 绘制具有图片编号和尺寸信息的优雅占位图，维持2481x3273的宽高比 (0.758:1)
+        // 并且适配任意缩放，保证视觉上模拟真实图片大小比例
+        function createFallbackCanvas(imageNumber, targetWidth = 800) {
+            // 原图比例 2481 / 3273 ≈ 0.7582
+            const aspectRatio = 2481 / 3273; // 宽高比
+            // 根据期望宽度计算高度（保证canvas内部分辨率合适，同时适应CSS）
+            const canvasWidth = targetWidth;
+            const canvasHeight = Math.round(targetWidth / aspectRatio);
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            const ctx = canvas.getContext('2d');
+            
+            // 优雅深色艺术背景，渐变色增强画册感
+            const grad = ctx.createLinearGradient(0, 0, canvasWidth*0.2, canvasHeight*0.8);
+            grad.addColorStop(0, '#2c2f3f');
+            grad.addColorStop(0.5, '#1b1d2b');
+            grad.addColorStop(1, '#11131e');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            
+            // 装饰边框 & 纹理
+            ctx.strokeStyle = '#ffb34788';
+            ctx.lineWidth = Math.max(2, canvasWidth * 0.012);
+            ctx.strokeRect(10, 10, canvasWidth - 20, canvasHeight - 20);
+            
+            // 绘制一些极简艺术网格
+            ctx.beginPath();
+            ctx.strokeStyle = '#ffffff22';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 3; i++) {
+                let offsetX = canvasWidth * (0.25 * (i+1));
+                ctx.moveTo(offsetX, 30);
+                ctx.lineTo(offsetX, canvasHeight - 30);
+                ctx.stroke();
+                let offsetY = canvasHeight * (0.25 * (i+1));
+                ctx.moveTo(30, offsetY);
+                ctx.lineTo(canvasWidth - 30, offsetY);
+                ctx.stroke();
+            }
+            
+            // 大号编号 (艺术字体)
+            const numberText = `${imageNumber}`;
+            ctx.font = `Bold ${Math.min(120, canvasWidth * 0.18)}px "SF Mono", "Segoe UI", system-ui, monospace`;
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 12;
+            ctx.fillStyle = '#ffcd94';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(numberText, canvasWidth/2, canvasHeight/2 - 10);
+            
+            // 副标题展示尺寸及画册标识
+            ctx.font = `${Math.max(14, canvasWidth * 0.035)}px system-ui, "Segoe UI"`;
+            ctx.fillStyle = '#bcaf8e';
+            ctx.shadowBlur = 4;
+            ctx.fillText(`图片 ${imageNumber}  ·  2481 x 3273`, canvasWidth/2, canvasHeight - canvasHeight*0.12);
+            
+            // 绘制一个模拟边框高光
+            ctx.strokeStyle = '#ffbd5a40';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(8, 8, canvasWidth - 16, canvasHeight - 16);
+            
+            ctx.fillStyle = '#f0dbb4';
+            ctx.font = `italic ${Math.max(12, canvasWidth * 0.03)}px system-ui`;
+            ctx.fillText(`✦ 电子画册 ✦`, canvasWidth/2, canvasHeight*0.12);
+            
+            return canvas;
+        }
+        
+        // 根据真实图片或fallback 渲染图片到 frame
+        // index: 1 ~ 36
+        function renderPicture(index) {
+            return new Promise((resolve) => {
+                // 清除之前所有子节点 (保留loading占位过渡)
+                while (imageFrame.firstChild) {
+                    imageFrame.removeChild(imageFrame.firstChild);
+                }
+                
+                // 显示加载指示器 (轻量级)
+                const loaderDiv = document.createElement('div');
+                loaderDiv.className = 'loading-placeholder';
+                loaderDiv.innerHTML = `<div class="spinner"></div><span>加载高清图片 ${index}</span>`;
+                imageFrame.appendChild(loaderDiv);
+                
+                // 创建真实的img元素尝试加载
+                const img = new Image();
+                // 构造图片路径: 命名 1.jpg, 2.jpg ... 36.jpg
+                const imageUrl = `${IMAGE_BASE_PATH}${index}${IMAGE_EXT}`;
+                let resolved = false;
+                
+                const onLoadSuccess = () => {
+                    if (resolved) return;
+                    resolved = true;
+                    // 加载成功，清理frame并展示img
+                    while (imageFrame.firstChild) imageFrame.removeChild(imageFrame.firstChild);
+                    img.classList.add('frame-media');
+                    // 确保原图比例适配
+                    img.style.maxWidth = '100%';
+                    img.style.maxHeight = '75vh';
+                    img.style.width = 'auto';
+                    img.style.height = 'auto';
+                    img.style.objectFit = 'contain';
+                    imageFrame.appendChild(img);
+                    resolve(true);
+                };
+                
+                const onErrorFallback = () => {
+                    if (resolved) return;
+                    resolved = true;
+                    // 真实图片加载失败 (如路径不存在或文件缺失) -> 生成优雅canvas替代
+                    while (imageFrame.firstChild) imageFrame.removeChild(imageFrame.firstChild);
+                    
+                    // 动态决定canvas基准尺寸 (根据容器宽度自适应，保证清晰和比例)
+                    const containerWidth = imageFrame.clientWidth;
+                    const preferWidth = Math.min(containerWidth * 0.85, 900);
+                    const fallbackCanvas = createFallbackCanvas(index, Math.max(400, preferWidth));
+                    fallbackCanvas.classList.add('frame-media');
+                    fallbackCanvas.style.maxWidth = '100%';
+                    fallbackCanvas.style.maxHeight = '75vh';
+                    fallbackCanvas.style.width = 'auto';
+                    fallbackCanvas.style.height = 'auto';
+                    imageFrame.appendChild(fallbackCanvas);
+                    resolve(false);
+                };
+                
+                img.onload = onLoadSuccess;
+                img.onerror = onErrorFallback;
+                // 设定跨域策略如果图片同源不需要设置，默认匿名
+                img.src = imageUrl;
+                // 超时后备 (加载过久，比如10秒未响应也fallback)
+                const timeoutId = setTimeout(() => {
+                    if (!resolved) {
+                        console.warn(`图片 ${index} 加载超时，使用后备画板`);
+                        onErrorFallback();
+                    }
+                }, 8000);
+                
+                // 清除超时标记以防内存, 图片完成后清除
+                const clearTimeoutHandler = () => {
+                    clearTimeout(timeoutId);
+                };
+                img.addEventListener('load', clearTimeoutHandler, { once: true });
+                img.addEventListener('error', clearTimeoutHandler, { once: true });
+            });
+        }
+        
+        // ---------- 切换页面主逻辑 (防抖/锁) ----------
+        async function switchToPage(newPage) {
+            // 合法性限制
+            if (newPage < 1) newPage = 1;
+            if (newPage > TOTAL_COUNT) newPage = TOTAL_COUNT;
+            if (newPage === currentIdx && currentIdx >=1 && currentIdx <= TOTAL_COUNT) {
+                // 页码相同无需刷新渲染，但按钮状态可刷新
+                updateButtonsState();
+                updatePageIndicator();
+                return;
+            }
+            
+            if (isRendering) {
+                // 如果正在渲染，保存最新的请求
+                pendingRender = newPage;
+                return;
+            }
+            
+            isRendering = true;
+            const needRefresh = (newPage !== currentIdx);
+            if (needRefresh) {
+                currentIdx = newPage;
+                updatePageIndicator();
+                updateButtonsState();
+                await renderPicture(currentIdx);
+            } else {
+                // 同页但强制刷新? 一般不走这里
+                await renderPicture(currentIdx);
+            }
+            
+            isRendering = false;
+            
+            // 处理积压的切换请求 (只保留最新)
+            if (pendingRender !== null && pendingRender !== currentIdx) {
+                const nextPending = pendingRender;
+                pendingRender = null;
+                await switchToPage(nextPending);
+            } else {
+                pendingRender = null;
+            }
+        }
+        
+        // ---------- 重置跳转输入框边界 ----------
+        function validateJumpInput() {
+            let val = parseInt(jumpInput.value, 10);
+            if (isNaN(val)) val = currentIdx;
+            val = Math.min(TOTAL_COUNT, Math.max(1, val));
+            jumpInput.value = val;
+            return val;
+        }
+        
+        // 跳转到指定页 (外部调用)
+        function jumpToPage() {
+            let target = validateJumpInput();
+            if (target !== currentIdx) {
+                switchToPage(target);
+            } else {
+                // 相同页也可刷新显示一次（确保图片确实展示）
+                switchToPage(currentIdx);
+            }
+        }
+        
+        // 上一页/下一页包装
+        function prevPage() {
+            if (currentIdx > 1) {
+                switchToPage(currentIdx - 1);
+            }
+        }
+        
+        function nextPage() {
+            if (currentIdx < TOTAL_COUNT) {
+                switchToPage(currentIdx + 1);
+            }
+        }
+        
+        // ---------- 键盘事件绑定 ----------
+        function onKeyDown(e) {
+            // 左右箭头键，如果用户在输入框内输入时不干扰输入体验
+            const targetTag = e.target.tagName;
+            if (targetTag === 'INPUT' || targetTag === 'TEXTAREA') {
+                // 如果当前焦点在跳转输入框内，避免误触翻页，但仍保留左右键输入数字时不需要翻页
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                    // 不处理，仅让用户正常编辑数字
+                    return;
+                }
+            }
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevPage();
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                nextPage();
+            }
+        }
+        
+        // ---------- 监听窗口大小变化，对canvas后备自适应轻微优化（无需重绘所有，保持原样，但若canvas尺寸比例不协可以重新调？无碍）----------
+        // 优雅起见，如果当前显示的组件是canvas并且因为缩放而模糊？本身canvas基于CSS不会丢失内容，但是当初生成时的canvas分辨率是固定，在高分屏无伤大雅，不必重绘
+        // 但为了细节，会在resize时可选重新生成当前页的后备（仅当当前显示为后备canvas且窗口变化剧烈时），避免画质太差。
+        // 简单优化：监听resize时如果当前显示元素是canvas并且图片路径不存在导致的fallback状态，重新生成更合适尺寸的canvas替代
+        let resizeTimer;
+        function onWindowResize() {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                // 检查当前展示的元素是不是canvas (并且其并非真实图片)
+                const frameDiv = imageFrame;
+                if (frameDiv && frameDiv.children.length === 1) {
+                    const child = frameDiv.children[0];
+                    if (child && child.tagName === 'CANVAS') {
+                        // 防止频繁重绘导致闪烁，重新生成一个更适配尺寸的canvas
+                        // 仅当原canvas不可否认地是fallback内容时, 可以通过检查是否有自定义属性或者直接就替换
+                        // 为避免破坏体验，用当前currentIdx重新生成canvas
+                        const currentNumber = currentIdx;
+                        // 重新生成前确保当前展示的确是后备（真实图片不会误伤）
+                        // 因为真实图片是img标签，不会进入此分支，安全
+                        const containerWidth = imageFrame.clientWidth;
+                        const preferW = Math.min(containerWidth * 0.85, 1000);
+                        const newCanvas = createFallbackCanvas(currentNumber, Math.max(400, preferW));
+                        newCanvas.classList.add('frame-media');
+                        newCanvas.style.maxWidth = '100%';
+                        newCanvas.style.maxHeight = '75vh';
+                        try {
+                            frameDiv.replaceChild(newCanvas, child);
+                        } catch(e) {}
+                    }
+                }
+            }, 160);
+        }
+        
+        // ---------- 初始化页面，显示第一张图 ----------
+        async function init() {
+            // 监听事件
+            prevBtn.addEventListener('click', prevPage);
+            nextBtn.addEventListener('click', nextPage);
+            jumpBtn.addEventListener('click', jumpToPage);
+            jumpInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    jumpToPage();
+                }
+            });
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('resize', onWindowResize);
+            
+            // 初始禁用按钮状态 (首页)
+            updateButtonsState();
+            currentIdx = 1;
+            updatePageIndicator();
+            // 渲染第一张图片 (带载入效果)
+            await renderPicture(1);
+        }
+        
+        // 启动画册
+        init().catch(err => {
+            console.warn("初始化遇到异常: ", err);
+            // 极端兜底: 让画册至少展示后备内容
+            if (imageFrame) {
+                while (imageFrame.firstChild) imageFrame.removeChild(imageFrame.firstChild);
+                const emergencyCanvas = createFallbackCanvas(currentIdx, 700);
+                emergencyCanvas.classList.add('frame-media');
+                imageFrame.appendChild(emergencyCanvas);
+            }
+        });
+    })();
+</script>
+</body>
+</html>
